@@ -1,0 +1,71 @@
+# 工作流名称
+name: Update China IP Rules
+
+# 触发条件
+on:
+  schedule:
+    - cron: '0 */16 * * *'  # 每16小时执行一次 (UTC时间)
+  workflow_dispatch:        # 添加手动触发按钮
+  push:                     # 当代码推送到main分支时也触发
+    branches: [ main ]
+
+# 工作流程任务
+jobs:
+  update:
+    # 指定运行环境为最新版本的 Ubuntu
+    runs-on: ubuntu-latest
+    
+    # 具体执行步骤
+    steps:
+      # 步骤1: 检出代码仓库
+      - name: Checkout repository
+        uses: actions/checkout@v2  # 使用官方的checkout action
+
+      # 步骤2: 下载IP列表并处理
+      - name: Download and Process IP List
+        run: |
+          # 下载原始IP列表文件
+          wget https://raw.githubusercontent.com/mayaxcn/china-ip-list/master/chnroute.txt
+          # 使用sed命令处理文件:
+          # 's/^/IP-CIDR,/' 在每行开头添加 'IP-CIDR,'
+          # 's/$/,DIRECT/' 在每行结尾添加 ',DIRECT'
+          sed 's/^/IP-CIDR,/; s/$/,DIRECT/' chnroute.txt > china-ip-rules.txt
+
+      # 步骤3: 如果文件有变化，提交更改
+      - name: Commit and push if changed
+        run: |
+          # 配置 git 用户信息(用于提交)
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          
+          # 将更改添加到暂存区
+          git add china-ip-rules.txt
+          
+          # 检查是否有变化，如果有则提交并推送
+          # git diff --staged --quiet 如果没有变化返回 true
+          # || 表示如果前面的命令失败(即有变化)，则执行后面的命令
+          git diff --staged --quiet || (git commit -m "Update IP rules" && git push)
+
+      # 步骤4: 部署到 GitHub Pages
+      - name: Setup GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3  # 使用社区维护的 GitHub Pages action
+        with:
+          # 使用 GitHub 自动生成的 token
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # 指定要发布的目录
+          publish_dir: .
+          # 指定发布到哪个分支
+          publish_branch: gh-pages
+
+# 补充说明:
+# 1. cron 表达式 '0 */16 * * *' 含义:
+#    - 0: 0分钟
+#    - */16: 每隔16小时
+#    - * * *: 对日、月、星期几没有特殊要求
+#
+# 2. secrets.GITHUB_TOKEN 是 GitHub Actions 自动提供的，无需手动设置
+#
+# 3. gh-pages 分支会被自动创建(如果不存在)
+#
+# 4. 整个流程:
+#    下载文件 -> 处理文件 -> 提交更改 -> 部署到 GitHub Pages
